@@ -93,3 +93,15 @@ export {
   sessionKeyOf,
 } from './engine/session-id.js'
 export { splitText } from './engine/split.js'
+export {
+  PROACTIVE_SEND_TYPERT_NAMESPACE,
+  PROACTIVE_SEND_TYPERT_METHOD,
+  PROACTIVE_SEND_MAX_TEXT_LENGTH,
+  validateProactiveSendInput,
+  deliverProactiveSend,
+  proactiveSendErrorStatus,
+  type ProactiveSendArgs,
+  type ProactiveSendRequest,
+  type ProactiveSendResult,
+  type ProactiveSendTarget,
+} from './engine/proactive-send.js'

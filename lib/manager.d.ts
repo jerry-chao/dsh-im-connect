@@ -115,6 +115,15 @@ export declare class ChannelManager {
         log: (line: string) => void;
         engineConfig: EngineConfig;
     });
+    /**
+     * 主动发送共用核心：HTTP 与未来 Typert 共用。
+     * Typert 预留：以 namespace `im-connect` / method `send`、
+     * 参数 `{ accountId, chatId, text, receiveIdType?, msgType? }` 注册时直接调此方法。
+     */
+    sendProactive(accountId: string, body: Record<string, unknown>): Promise<{
+        status: number;
+        body: Record<string, unknown>;
+    }>;
     list(): ChannelView[];
     private accountView;
     channelSessions(): {

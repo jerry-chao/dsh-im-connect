@@ -21,6 +21,11 @@ import { normalizeAssistantModel, normalizePermission, normalizeWorkspacePath, t
 import type { ChannelAdapter, EngineConfig, ImMessage } from './engine/types.js'
 import { KeyedSerialQueue } from './engine/keyed-queue.js'
 import { backupCorruptFileSync, writeFileAtomicSync } from './engine/atomic-file.js'
+import {
+  deliverProactiveSend,
+  proactiveSendErrorStatus,
+  validateProactiveSendInput,
+} from './engine/proactive-send.js'
 import { sameWorkspacePath } from './engine/workspace-path.js'
 
 export const API_CLIENT_HEADER = 'x-dsh-im-connect-client'
@@ -278,6 +283,38 @@ export class ChannelManager {
       },
     })
     this.flush()
+  }
+
+  /**
+   * 主动发送共用核心：HTTP 与未来 Typert 共用。
+   * Typert 预留：以 namespace `im-connect` / method `send`、
+   * 参数 `{ accountId, chatId, text, receiveIdType?, msgType? }` 注册时直接调此方法。
+   */
+  async sendProactive(accountId: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
+    const state = this.store.channels[accountId]
+    if (!state) return { status: 404, body: { ok: false, error: '账号不存在' } }
+    if (state.enabled === false) return { status: 400, body: { ok: false, error: '账号已停用' } }
+    const validated = validateProactiveSendInput(body)
+    if (!validated.value) {
+      return { status: proactiveSendErrorStatus(validated.code), body: { ok: false, error: validated.error } }
+    }
+    return this.channelOperations.run(accountId, async () => {
+      const adapter = this.running.get(accountId)
+      const result = await deliverProactiveSend(
+        {
+          accountId,
+          allowlist: [...(this.store.allowlist[accountId] ?? [])],
+          adapter,
+          maxMessageLength: adapter?.maxMessageLength ?? 2000,
+        },
+        validated.value!,
+      )
+      if (!result.ok) {
+        return { status: proactiveSendErrorStatus(result.code), body: { ok: false, error: result.error } }
+      }
+      this.log(`[proactive-send] ${accountId} -> ${result.chatId} 已发送 ${result.chunks} 片`)
+      return { status: 200, body: { ok: true, accountId, chatId: result.chatId, chunks: result.chunks } }
+    })
   }
 
   list(): ChannelView[] {
@@ -709,6 +746,12 @@ export class ChannelManager {
             if (!userId) { send(400, { ok: false, error: '缺少 userId' }); return }
             action === 'approve' ? this.approve(accountId, userId) : this.deny(accountId, userId)
             send(200, { ok: true, pending: this.pendingRequests() })
+            return
+          }
+          if (action === 'send') {
+            // 主动发送：复用 adapter.send，用 dsh 自己的身份发出（Issue #9）。
+            const result = await this.sendProactive(accountId, body)
+            send(result.status, result.body)
             return
           }
           send(404, { ok: false, error: `未知账号操作 ${action}` })
