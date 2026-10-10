@@ -170,7 +170,22 @@ export function registerBoardNotify(
   manager: ChannelManager,
   log: BoardNotifyLogger,
 ): (() => void) | undefined {
-  const face = (ctx as { taskBoard?: unknown }).taskBoard
+  // 注意：禁止无保护地直读 ctx.taskBoard。Cordis 里未声明进 inject 的服务，
+  // 连读属性都会抛 `cannot get property "taskBoard" without inject`，
+  // 导致插件激活失败（2026-10-10 本地安装启动失败即因此）。
+  // 优先用 ctx.get() 做可选查找（缺席返回 undefined）；测试替身等没有 get
+  // 的普通对象才回退到属性直读，且同样包住异常走降级。
+  let face: unknown
+  try {
+    const get = (ctx as { get?: unknown }).get
+    if (typeof get === 'function') {
+      face = (get as (name: string) => unknown).call(ctx, BOARD_NOTIFY_SERVICE_NAME)
+    } else {
+      face = (ctx as { taskBoard?: unknown }).taskBoard
+    }
+  } catch {
+    face = undefined
+  }
   if (!face || typeof (face as BoardNotifyService).registerExtension !== 'function') {
     log('[board-notify] 未发现 taskBoard 服务，跳过扩展注册')
     return undefined

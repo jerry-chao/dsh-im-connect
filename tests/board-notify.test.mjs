@@ -130,3 +130,29 @@ test('board 拒绝注册时降级', () => {
   assert.equal(registerBoardNotify({ taskBoard: fakeBoard }, {}, (line) => logs.push(line)), undefined)
   assert.ok(logs.some((line) => line.includes('拒绝')))
 })
+
+test('回归：未注入 taskBoard 的 Cordis ctx 读属性抛错时不炸插件（2026-10-10 启动失败）', () => {
+  const logs = []
+  // 模拟 Cordis：未声明进 inject 的服务，直读属性即抛错。
+  const cordisLike = {
+    get: () => undefined,
+  }
+  Object.defineProperty(cordisLike, 'taskBoard', { get() { throw new Error('cannot get property "taskBoard" without inject') } })
+  assert.equal(registerBoardNotify(cordisLike, {}, (line) => logs.push(line)), undefined)
+  assert.ok(logs.some((line) => line.includes('跳过')))
+})
+
+test('回归：ctx.get 抛错时同样降级', () => {
+  const logs = []
+  const badCtx = { get: () => { throw new Error('authentication unavailable') } }
+  assert.equal(registerBoardNotify(badCtx, {}, (line) => logs.push(line)), undefined)
+  assert.ok(logs.some((line) => line.includes('跳过')))
+})
+
+test('ctx.get 能拿到 board 时正常注册', () => {
+  const { host, callbacks } = makeHost({ prompt: '普通任务' })
+  const fakeBoard = { registerExtension: (ext) => { ext.start(host); return () => {} } }
+  const ctx = { get: (name) => (name === 'taskBoard' ? fakeBoard : undefined) }
+  assert.equal(typeof registerBoardNotify(ctx, {}, () => {}), 'function')
+  assert.equal(callbacks.length, 1)
+})
