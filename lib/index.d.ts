@@ -20,5 +20,5 @@ export { IM_ORIGIN, IM_SESSION_PREFIX, createImSessionId, isImOrigin, isImSessio
 export { splitText } from './engine/split.js';
 export { PROACTIVE_SEND_TYPERT_NAMESPACE, PROACTIVE_SEND_TYPERT_METHOD, PROACTIVE_SEND_MAX_TEXT_LENGTH, validateProactiveSendInput, deliverProactiveSend, proactiveSendErrorStatus, type ProactiveSendArgs, type ProactiveSendRequest, type ProactiveSendResult, type ProactiveSendTarget, } from './engine/proactive-send.js';
 export { ImConnectSendService } from './engine/typert-send.js';
-export { BOARD_NOTIFY_API_VERSION, BOARD_NOTIFY_EXTENSION_ID, parseNotifyMarker, registerBoardNotify, } from './engine/board-notify.js';
+export { BOARD_NOTIFY_API_VERSION, BOARD_NOTIFY_EXTENSION_ID, BOARD_NOTIFY_SERVICE_NAME, parseNotifyMarker, registerBoardNotify, } from './engine/board-notify.js';
 //# sourceMappingURL=index.d.ts.map

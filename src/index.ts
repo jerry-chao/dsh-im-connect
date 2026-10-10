@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { ChannelManager } from './manager.js'
 import { ImConnectSendService } from './engine/typert-send.js'
-import { registerBoardNotify } from './engine/board-notify.js'
+import { registerBoardNotify, BOARD_NOTIFY_SERVICE_NAME } from './engine/board-notify.js'
 import type { EngineConfig } from './engine/types.js'
 import { createRotatingFileAppender } from './engine/file-log.js'
 import { registerPluginUpdater } from './plugin-updater.js'
@@ -75,8 +75,27 @@ export function apply(ctx: Context, config: PluginConfig): void {
   log(`[boot] ChannelManager 构造 ${Date.now() - applyStarted}ms`)
   // Typert 内部调用入口（namespace im-connect / method send），随插件上下文释放。
   new ImConnectSendService(ctx, manager)
-  // task-board 扩展：任务落定后按 prompt 标记自动投递（board 缺席则跳过）。
-  const boardNotifyDispose = registerBoardNotify(ctx, manager, log)
+  // task-board 扩展：任务落定后按 prompt 标记自动投递。
+  // board 可能晚于本插件发布服务，用 inject 等它出现；无 inject 的旧宿主走直接注册。
+  let boardNotifyDispose: (() => void) | undefined
+  const registerBoard = (): void => {
+    try {
+      boardNotifyDispose?.()
+    } catch {
+      // 忽略旧注册释放异常。
+    }
+    boardNotifyDispose = registerBoardNotify(ctx, manager, log)
+  }
+  const scopedInject = (ctx as unknown as {
+    inject?: (names: readonly string[], callback: () => unknown) => unknown
+  }).inject
+  if (typeof scopedInject === 'function') {
+    scopedInject.call(ctx, [BOARD_NOTIFY_SERVICE_NAME], () => {
+      registerBoard()
+    })
+  } else {
+    registerBoard()
+  }
   ctx.effect(() => {
     manager.registerApi(ctx)
     // 卸载或初始化失败后不再恢复会话；保留一个完整异常链，避免后台拒绝终止宿主。
@@ -122,6 +141,7 @@ export { ImConnectSendService } from './engine/typert-send.js'
 export {
   BOARD_NOTIFY_API_VERSION,
   BOARD_NOTIFY_EXTENSION_ID,
+  BOARD_NOTIFY_SERVICE_NAME,
   parseNotifyMarker,
   registerBoardNotify,
 } from './engine/board-notify.js'

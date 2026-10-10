@@ -1,6 +1,6 @@
 import type { ChannelManager } from '../manager.js';
 /**
- * task-board 扩展：在任务执行落定后，把任务 prompt 里声明的投递文件
+ * task-board 扩展：任务执行落定后，把 prompt 标记里的短通知
  * 经 dsh-im-connect 已有账号连接发出（复用 ChannelManager.sendProactive）。
  *
  * 只消费 board 扩展契约，不修改 board：
@@ -8,18 +8,17 @@ import type { ChannelManager } from '../manager.js';
  * - board 缺席/禁用/拒绝时降级为日志，一切照常；
  * - 收件人仍受账号 allowlist 约束（sendProactive 内校验）。
  *
- * 任务 prompt 标记（静态文本，由任务作者写入）：
- *   <!-- im-notify: {"accountId":"wecom_xxx","chatId":"yyy","file":"/abs/report.md"} -->
- * agent 写完文件即收工；settle 回调读文件发送，结果写回 integration 留痕。
+ * 任务 prompt 标记（静态文本，由任务作者写入，仅短通知）：
+ *   <!-- im-notify: {"accountId":"wecom_xxx","chatId":"yyy","text":"构建挂了，速看"} -->
+ * settle 回调取标记原文发送，结果写回 integration 留痕。
  */
 export declare const BOARD_NOTIFY_EXTENSION_ID = "im-connect-notify";
 export declare const BOARD_NOTIFY_API_VERSION = 1;
 export declare const BOARD_NOTIFY_SERVICE_NAME = "taskBoard";
-export declare const BOARD_NOTIFY_MAX_TEXT_LENGTH = 4000;
 export interface BoardNotifyConfig {
     accountId: string;
     chatId: string;
-    file: string;
+    text: string;
 }
 export declare function parseNotifyMarker(prompt: string): BoardNotifyConfig | undefined;
 /** board 侧最小能力面（按 board 0.4.5 / apiVersion 1 锁定，只读所需子集）。 */

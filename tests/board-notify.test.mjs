@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import {
   BOARD_NOTIFY_API_VERSION,
   BOARD_NOTIFY_EXTENSION_ID,
@@ -38,11 +35,13 @@ async function waitFor(cond, timeoutMs = 3000) {
 }
 
 test('标记解析：合法/缺失/非法/缺字段', () => {
-  const good = '正文\n<!-- im-notify: {"accountId":"wecom_1","chatId":"u1","file":"/tmp/x.md"} -->\n尾'
-  assert.deepEqual(parseNotifyMarker(good), { accountId: 'wecom_1', chatId: 'u1', file: '/tmp/x.md' })
+  const good = '正文\n<!-- im-notify: {"accountId":"wecom_1","chatId":"u1","text":"构建挂了"} -->\n尾'
+  assert.deepEqual(parseNotifyMarker(good), { accountId: 'wecom_1', chatId: 'u1', text: '构建挂了' })
   assert.equal(parseNotifyMarker('没有标记'), undefined)
   assert.equal(parseNotifyMarker('<!-- im-notify: {oops} -->'), undefined)
   assert.equal(parseNotifyMarker('<!-- im-notify: {"accountId":"a"} -->'), undefined)
+  assert.equal(parseNotifyMarker('<!-- im-notify: {"accountId":"a","chatId":"u"} -->'), undefined)
+  assert.equal(parseNotifyMarker('<!-- im-notify: {"accountId":"a","chatId":"u","text":"  "} -->'), undefined)
   assert.equal(parseNotifyMarker('<!-- im-notify: [] -->'), undefined)
 })
 
@@ -58,12 +57,8 @@ test('扩展 id 与契约版本锁定', () => {
   assert.equal(BOARD_NOTIFY_API_VERSION, 1)
 })
 
-test('settle 成功：读文件发送并留痕', async (t) => {
-  const dir = mkdtempSync(join(tmpdir(), 'board-notify-'))
-  t.after(() => rmSync(dir, { recursive: true, force: true }))
-  const file = join(dir, 'report.md')
-  writeFileSync(file, '# 早报\n- HIM-1 xxx')
-  const prompt = `查\n<!-- im-notify: {"accountId":"wecom_1","chatId":"u1","file":"${file}"} -->`
+test('settle 成功：内联正文直接发送并留痕', async () => {
+  const prompt = '查\n<!-- im-notify: {"accountId":"wecom_1","chatId":"u1","text":"构建挂了"} -->'
   const { host, audits, callbacks } = makeHost({ prompt })
   const manager = makeManager(async (accountId, body) => (
     { status: 200, body: { ok: true, accountId, chatId: body.chatId, chunks: 1 } }
@@ -75,7 +70,7 @@ test('settle 成功：读文件发送并留痕', async (t) => {
   assert.equal(typeof dispose, 'function')
   callbacks[0]({ taskId: 't1', outcome: 'succeeded' })
   await waitFor(() => audits.length > 0)
-  assert.deepEqual(manager.calls, [['wecom_1', { chatId: 'u1', text: '# 早报\n- HIM-1 xxx' }]])
+  assert.deepEqual(manager.calls, [['wecom_1', { chatId: 'u1', text: '构建挂了' }]])
   assert.equal(audits[0][0], 't1')
   assert.equal(audits[0][1].ok, true)
   assert.equal(audits[0][1].chatId, 'u1')
@@ -95,7 +90,7 @@ test('无标记 / 任务不存在时不发送', async () => {
 })
 
 test('失败轮次跳过并留痕', async () => {
-  const { host, audits, callbacks } = makeHost({ prompt: '<!-- im-notify: {"accountId":"w","chatId":"u","file":"/tmp/never.md"} -->' })
+  const { host, audits, callbacks } = makeHost({ prompt: '<!-- im-notify: {"accountId":"w","chatId":"u","text":"hi"} -->' })
   const manager = makeManager(async () => { throw new Error('不应被调用') })
   const fakeBoard = { registerExtension: (ext) => { ext.start(host); return () => {} } }
   registerBoardNotify({ taskBoard: fakeBoard }, manager, () => {})
@@ -105,23 +100,14 @@ test('失败轮次跳过并留痕', async () => {
   assert.equal(audits[0][1].ok, false)
 })
 
-test('文件缺失与发送失败都留痕且不抛', async () => {
-  const { host, audits, callbacks } = makeHost({ prompt: '<!-- im-notify: {"accountId":"w","chatId":"u","file":"/tmp/board-notify-nope.md"} -->' })
+test('发送失败留痕且不抛', async () => {
+  const { host, audits, callbacks } = makeHost({ prompt: '<!-- im-notify: {"accountId":"w","chatId":"u","text":"hi"} -->' })
   const manager = makeManager(async () => ({ status: 502, body: { ok: false, error: 'boom' } }))
   const fakeBoard = { registerExtension: (ext) => { ext.start(host); return () => {} } }
   registerBoardNotify({ taskBoard: fakeBoard }, manager, () => {})
   callbacks[0]({ taskId: 't1', outcome: 'succeeded' })
   await waitFor(() => audits.length > 0)
-  assert.match(audits[0][1].error, /读不到投递文件/)
-  const { host: host2, audits: audits2, callbacks: callbacks2 } = makeHost({ prompt: '<!-- im-notify: {"accountId":"w","chatId":"u","file":"/tmp/board-notify-nope.md"} -->' })
-  writeFileSync('/tmp/board-notify-sendfail.md', 'hi')
-  host2.tasks.get = () => ({ prompt: `<!-- im-notify: {"accountId":"w","chatId":"u","file":"/tmp/board-notify-sendfail.md"} -->` })
-  const fakeBoard2 = { registerExtension: (ext) => { ext.start(host2); return () => {} } }
-  registerBoardNotify({ taskBoard: fakeBoard2 }, manager, () => {})
-  callbacks2[0]({ taskId: 't1', outcome: 'succeeded' })
-  await waitFor(() => audits2.length > 0)
-  assert.equal(audits2[0][1].error, 'boom')
-  rmSync('/tmp/board-notify-sendfail.md', { force: true })
+  assert.equal(audits[0][1].error, 'boom')
 })
 
 test('board 拒绝注册时降级', () => {

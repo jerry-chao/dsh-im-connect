@@ -1,8 +1,7 @@
-import { readFile } from 'node:fs/promises'
 import type { ChannelManager } from '../manager.js'
 
 /**
- * task-board 扩展：在任务执行落定后，把任务 prompt 里声明的投递文件
+ * task-board 扩展：任务执行落定后，把 prompt 标记里的短通知
  * 经 dsh-im-connect 已有账号连接发出（复用 ChannelManager.sendProactive）。
  *
  * 只消费 board 扩展契约，不修改 board：
@@ -10,21 +9,20 @@ import type { ChannelManager } from '../manager.js'
  * - board 缺席/禁用/拒绝时降级为日志，一切照常；
  * - 收件人仍受账号 allowlist 约束（sendProactive 内校验）。
  *
- * 任务 prompt 标记（静态文本，由任务作者写入）：
- *   <!-- im-notify: {"accountId":"wecom_xxx","chatId":"yyy","file":"/abs/report.md"} -->
- * agent 写完文件即收工；settle 回调读文件发送，结果写回 integration 留痕。
+ * 任务 prompt 标记（静态文本，由任务作者写入，仅短通知）：
+ *   <!-- im-notify: {"accountId":"wecom_xxx","chatId":"yyy","text":"构建挂了，速看"} -->
+ * settle 回调取标记原文发送，结果写回 integration 留痕。
  */
 export const BOARD_NOTIFY_EXTENSION_ID = 'im-connect-notify'
 export const BOARD_NOTIFY_API_VERSION = 1
 export const BOARD_NOTIFY_SERVICE_NAME = 'taskBoard'
-export const BOARD_NOTIFY_MAX_TEXT_LENGTH = 4000
 
 const MARKER_PATTERN = /<!--\s*im-notify:\s*(\{.*?\})\s*-->/s
 
 export interface BoardNotifyConfig {
   accountId: string
   chatId: string
-  file: string
+  text: string
 }
 
 export function parseNotifyMarker(prompt: string): BoardNotifyConfig | undefined {
@@ -42,11 +40,11 @@ export function parseNotifyMarker(prompt: string): BoardNotifyConfig | undefined
   const record = parsed as Record<string, unknown>
   const accountId = record['accountId']
   const chatId = record['chatId']
-  const file = record['file']
+  const text = record['text']
   if (typeof accountId !== 'string' || !accountId.trim()) return undefined
   if (typeof chatId !== 'string' || !chatId.trim()) return undefined
-  if (typeof file !== 'string' || !file.trim()) return undefined
-  return { accountId: accountId.trim(), chatId: chatId.trim(), file: file.trim() }
+  if (typeof text !== 'string' || !text.trim()) return undefined
+  return { accountId: accountId.trim(), chatId: chatId.trim(), text }
 }
 
 /** board 侧最小能力面（按 board 0.4.5 / apiVersion 1 锁定，只读所需子集）。 */
@@ -118,22 +116,8 @@ async function handleSettled(
     await audit(host, log, event.taskId, { ok: false, error: `本轮执行结果为 ${event.outcome}，未投递` })
     return
   }
-  let text: string
-  try {
-    text = await readFile(config.file, 'utf8')
-  } catch {
-    await audit(host, log, event.taskId, { ok: false, error: `读不到投递文件 ${config.file}` })
-    log(`[board-notify] ${event.taskId} 读不到投递文件 ${config.file}`)
-    return
-  }
-  if (!text.trim()) {
-    await audit(host, log, event.taskId, { ok: false, error: '投递文件为空' })
-    return
-  }
-  if (text.length > BOARD_NOTIFY_MAX_TEXT_LENGTH) {
-    await audit(host, log, event.taskId, { ok: false, error: `正文超过 ${BOARD_NOTIFY_MAX_TEXT_LENGTH} 字上限` })
-    return
-  }
+  let text: string = config.text
+  // 超长等校验交给 sendProactive，失败同样写回留痕。
   let result: Awaited<ReturnType<ChannelManager['sendProactive']>>
   try {
     result = await manager.sendProactive(config.accountId, { chatId: config.chatId, text })
@@ -216,7 +200,9 @@ export function registerBoardNotify(
     },
   }
   try {
-    return (face as BoardNotifyService).registerExtension(extension)
+    const dispose = (face as BoardNotifyService).registerExtension(extension)
+    log('[board-notify] 已注册到 taskBoard')
+    return dispose
   } catch (error) {
     log(`[board-notify] 注册被 board 拒绝: ${error instanceof Error ? error.message : String(error)}`)
     return undefined
