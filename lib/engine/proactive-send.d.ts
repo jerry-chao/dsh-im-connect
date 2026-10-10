@@ -21,7 +21,7 @@ export interface ProactiveSendRequest {
     /** 仅支持 text；post/image 预留。 */
     msgType?: string;
 }
-export type ProactiveSendErrorCode = 'missing_chat' | 'missing_text' | 'too_long' | 'unsupported_receive_type' | 'unsupported_msg_type' | 'not_allowlisted' | 'not_connected' | 'send_failed';
+export type ProactiveSendErrorCode = 'missing_chat' | 'missing_text' | 'too_long' | 'unsupported_receive_type' | 'unsupported_msg_type' | 'unknown_account' | 'account_disabled' | 'not_allowlisted' | 'not_connected' | 'send_failed';
 export interface ProactiveSendTarget {
     accountId: string;
     allowlist: string[];

@@ -307,6 +307,7 @@ Slack 走 Socket Mode 长连接，不需要公网地址，也不用配置请求�
 | --- | --- |
 | 用户准入 | 群聊不用绑定，只需 @。每个账号可选择「仅已批准用户」或「允许所有私聊用户」；默认仅批准用户可用，微信 / 飞书 / Lark / QQ 扫码者会自动加入该账号白名单 |
 | 管理接口 | `/api/dsh-im-connect`；通过宿主 `connection.requestRejection` 验证 Host、Origin 和 Cookie，本机也须登录；认证不可用返回 503，写接口保留 JSON、客户端请求头和 1 MiB 限制 |
+| 主动发送 | `POST /api/dsh-im-connect/accounts/{accountId}/send` 复用该账号自己的连接；收件人必须在白名单。无头调用方改走 Typert 命名空间 `im-connect` / 方法 `send`，参数 `{accountId, chatId, text}`，不用 Cookie；两条路径共用同一校验与发送逻辑 |
 | 敏感字段 | 包括微信 token 在内均优先写入 DSH `ctx.credentials`；没有该服务时落到 `%DSH_HOME%\dsh-im-connect\secrets.json`（明文，仅限当前用户，禁止同步或分享） |
 | 账号状态 | `channels.json` 按账号保存工作区、模型、权限、私聊准入、启用状态和凭据引用，不保存明文 Secret |
 | 浏览器回包 | 不返回 token、secret、App Secret 或内部异常详情 |

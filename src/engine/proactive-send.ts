@@ -32,6 +32,8 @@ export type ProactiveSendErrorCode =
   | 'too_long'
   | 'unsupported_receive_type'
   | 'unsupported_msg_type'
+  | 'unknown_account'
+  | 'account_disabled'
   | 'not_allowlisted'
   | 'not_connected'
   | 'send_failed'

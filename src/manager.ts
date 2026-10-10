@@ -292,11 +292,11 @@ export class ChannelManager {
    */
   async sendProactive(accountId: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
     const state = this.store.channels[accountId]
-    if (!state) return { status: 404, body: { ok: false, error: '账号不存在' } }
-    if (state.enabled === false) return { status: 400, body: { ok: false, error: '账号已停用' } }
+    if (!state) return { status: 404, body: { ok: false, code: 'unknown_account', error: '账号不存在' } }
+    if (state.enabled === false) return { status: 400, body: { ok: false, code: 'account_disabled', error: '账号已停用' } }
     const validated = validateProactiveSendInput(body)
     if (!validated.value) {
-      return { status: proactiveSendErrorStatus(validated.code), body: { ok: false, error: validated.error } }
+      return { status: proactiveSendErrorStatus(validated.code), body: { ok: false, code: validated.code, error: validated.error } }
     }
     return this.channelOperations.run(accountId, async () => {
       const adapter = this.running.get(accountId)
@@ -310,7 +310,7 @@ export class ChannelManager {
         validated.value!,
       )
       if (!result.ok) {
-        return { status: proactiveSendErrorStatus(result.code), body: { ok: false, error: result.error } }
+        return { status: proactiveSendErrorStatus(result.code), body: { ok: false, code: result.code, error: result.error } }
       }
       this.log(`[proactive-send] ${accountId} -> ${result.chatId} 已发送 ${result.chunks} 片`)
       return { status: 200, body: { ok: true, accountId, chatId: result.chatId, chunks: result.chunks } }

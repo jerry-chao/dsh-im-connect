@@ -306,6 +306,7 @@ Command permission does not grant DM admission or replace tool approval. Enabled
 | --- | --- |
 | Access | Groups need no binding, only a mention. Each account can allow only approved users or all DM users; approved-only is the default, and WeChat / Feishu / Lark / QQ QR scanners are added to that account's allowlist automatically |
 | Management API | Uses `/api/dsh-im-connect`, following the REST prefix used by other DSH plugins. It delegates Host, Origin, and Cookie checks to Host `connection.requestRejection`, including local requests. Unavailable authentication returns 503; mutations retain JSON, client-header, and 1 MiB limits |
+| Proactive send | `POST /api/dsh-im-connect/accounts/{accountId}/send` reuses that account's own connection; recipients must be allowlisted. Headless callers use Typert namespace `im-connect` / method `send` with `{accountId, chatId, text}` instead of cookies; both paths share validation and delivery |
 | Secrets | WeChat tokens and other secrets prefer DSH `ctx.credentials`; otherwise they use plaintext `%DSH_HOME%\dsh-im-connect\secrets.json`, restricted to the current user and never safe to sync or share |
 | Account state | `channels.json` stores per-account workspace, model, permission, private access, enablement, and credential refs, not raw secrets |
 | Browser payloads | Never include tokens, secrets, App Secrets, or internal error details |
